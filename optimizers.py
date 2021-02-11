@@ -5,6 +5,10 @@ from os.path import isfile, join
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import pdb
+from pytket.extensions.pyzx import pyzx_to_tk, tk_to_pyzx
+from pytket.passes import RemoveRedundancies
+import seaborn as sns
+import pandas as pd
 
 class Optimizer(ABC):
 
@@ -32,6 +36,7 @@ class Optimizer(ABC):
     def desc(self):
         pass
 
+# FIXME: Not functional
 class QiskitTranspiler(Optimizer):
 
     def __init__(self, opt_level):
@@ -50,6 +55,21 @@ class QiskitTranspiler(Optimizer):
     def desc(self):
         return "Qiskit's default transpiler. Makes use of various individual Transpiler Passes."
 
+class TketBasic(Optimizer):
+    def _optimize(self, c):
+        c_tket = pyzx_to_tk(c)
+        RemoveRedundancies().apply(c_tket)
+        c_opt = tk_to_pyzx(c_tket)
+        return c_opt
+
+    @property
+    def name(self):
+        return f"RemoveRedundancies (tket)"
+
+    @property
+    def desc(self):
+        return "Tket's most basic optimization method"
+
 class FullCircuitOptimize(Optimizer):
 
     def _optimize(self, c):
@@ -64,17 +84,9 @@ class FullCircuitOptimize(Optimizer):
         return "PyZX's most general circuit optimization procedure"
 
 
-# Basic circuit optimization
-OPTIMIZERS = [
-    QiskitTranspiler(opt_level=0),
-    QiskitTranspiler(opt_level=1)
-]
-
-
-
-MAX_TCOUNT = 50
-MAX_2QUBIT_COUNT = 50
-MAX_QUBITS = 10
+MAX_TCOUNT = 100
+MAX_2QUBIT_COUNT = 100
+MAX_QUBITS = 20
 MAX_NGATES = 100
 
 def is_small(c):
@@ -126,27 +138,39 @@ def plot_circ_info(css):
     plt.tight_layout()
 
 
+def compute_reductions(original_cs, css, val=("2-qubit-counts", lambda c: c.twoqubitcount())):
 
+    val_name, val_func = val
 
+    original_vals = [val_func(c) for c in original_cs]
+    d = {'reduction': list(), 'method': list()}
+    for (cs_name, cs) in css:
+        cs_vals = [val_func(c) for c in cs]
+        reductions = [(orig_val - opt_val) / orig_val * 100
+                      for (orig_val, opt_val) in zip(original_vals, cs_vals)]
+        d['reduction'] += reductions
+        d['method'] += [cs_name] * len(cs)
+    df = pd.DataFrame(data=d)
 
+    plt.close('all')
+    ax = sns.boxplot(x="method", y="reduction", data=df)
+    ax.set_title(f"{val_name} reductions")
 
 # Note: Could do evolutionary approach with qiskit "passes" as well
 if __name__ == "__main__":
-    benchdir = "bench"
-    fs = [f for f in listdir(benchdir) if isfile(join(benchdir, f))]
-    cs = [zx.Circuit.load(join(benchdir, f)).to_basic_gates() for f in fs]
+    # cs_dir = "circuits/bench"
+    cs_dir = "circuits/CNOT_HAD_PHASE/qubits_10-20_depth_50-100"
+    fs = [f for f in listdir(cs_dir) if isfile(join(cs_dir, f))]
+    cs = [zx.Circuit.load(join(cs_dir, f)).to_basic_gates() for f in fs]
     print(f"Loaded {len(cs)} circuits...")
 
-    # plot_circ_info([('all', cs)])
-    # plt.show()
 
+    test_cs = [c for c in cs if is_small(c)]
+    print(f"Loaded {len(test_cs)} small circuits...")
+    optimizers = [FullCircuitOptimize(), TketBasic()]
 
-    small_cs = [c for c in cs if is_small(c)]
-    print(f"Loaded {len(small_cs)} small circuits...")
-    full_circ_opt = FullCircuitOptimize()
+    css = [(opt.name, [opt.optimize(c) for c in tqdm(test_cs)]) for opt in tqdm(optimizers)]
+    # plot_circ_info([('original', test_cs)] + css)
+    compute_reductions(test_cs, css)
 
-    css = [('original', small_cs)]
-    opts = [full_circ_opt.optimize(c) for c in small_cs]
-    css.append((full_circ_opt.name, opts))
-    plot_circ_info(css)
     plt.show()
