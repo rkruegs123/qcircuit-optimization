@@ -1,4 +1,3 @@
-import pyzx as zx
 import os
 import pdb
 import argparse
@@ -6,6 +5,10 @@ from os import listdir
 from os.path import isfile, join
 from tqdm import tqdm
 import numpy as np
+
+import sys
+sys.path.append('../pyzx')
+import pyzx as zx
 
 
 if __name__ == "__main__":

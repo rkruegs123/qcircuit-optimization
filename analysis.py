@@ -1,88 +1,19 @@
-from abc import ABC, abstractmethod
-import pyzx as zx
 from os import listdir
 from os.path import isfile, join
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import pdb
-from pytket.extensions.pyzx import pyzx_to_tk, tk_to_pyzx
-from pytket.passes import RemoveRedundancies
 import seaborn as sns
 import pandas as pd
 
-class Optimizer(ABC):
+import sys
+sys.path.append('../pyzx')
+import pyzx as zx
 
-    def __init__(self):
-        super().__init__()
-
-    def optimize(self, c):
-        assert(isinstance(c, zx.Circuit))
-        c_opt = self._optimize(c)
-        assert(isinstance(c_opt, zx.Circuit))
-        assert(c.verify_equality(c_opt))
-        return c_opt
-
-    @abstractmethod
-    def _optimize(self, c):
-        pass
-
-    @property
-    @abstractmethod
-    def name(self):
-        pass
-
-    @property
-    @abstractmethod
-    def desc(self):
-        pass
-
-# FIXME: Not functional
-class QiskitTranspiler(Optimizer):
-
-    def __init__(self, opt_level):
-        self.opt_level = opt_level
-        super().__init__()
-
-    def _optimize(self, c):
-        return c
-        # qiskit.transpile(c, opt_level=self.opt_level) # FIXME: just for show
-
-    @property
-    def name(self):
-        return f"Qiskit Transpiler (level={self.opt_level})"
-
-    @property
-    def desc(self):
-        return "Qiskit's default transpiler. Makes use of various individual Transpiler Passes."
-
-class TketBasic(Optimizer):
-    def _optimize(self, c):
-        c_tket = pyzx_to_tk(c)
-        RemoveRedundancies().apply(c_tket)
-        c_opt = tk_to_pyzx(c_tket)
-        return c_opt
-
-    @property
-    def name(self):
-        return f"RemoveRedundancies (tket)"
-
-    @property
-    def desc(self):
-        return "Tket's most basic optimization method"
-
-class FullCircuitOptimize(Optimizer):
-
-    def _optimize(self, c):
-        return zx.full_optimize(c)
-
-    @property
-    def name(self):
-        return f"full_optimize (PyZX)"
-
-    @property
-    def desc(self):
-        return "PyZX's most general circuit optimization procedure"
-
+# import optimizers
+from baseline_optimizers import QiskitTranspiler, TketMinCX, TketFullPeephole, FullOptimize, \
+    FullReduce, TeleportReduce, TketBasic
+from sa_optimizers import AleksSA
 
 MAX_TCOUNT = 100
 MAX_2QUBIT_COUNT = 100
@@ -103,6 +34,7 @@ def plot_circ_info(css):
     fig = plt.figure()
     fig.set_figheight(10)
     fig.set_figwidth(10)
+
 
     ax1 = plt.subplot2grid((2, 2), (0, 0))
     ax2 = plt.subplot2grid((2, 2), (0, 1), colspan=1)
@@ -138,7 +70,7 @@ def plot_circ_info(css):
     plt.tight_layout()
 
 
-def compute_reductions(original_cs, css, val=("2-qubit-counts", lambda c: c.twoqubitcount())):
+def compute_reductions(original_cs, css, ax, val=("2-qubit-counts", lambda c: c.twoqubitcount())):
 
     val_name, val_func = val
 
@@ -152,25 +84,43 @@ def compute_reductions(original_cs, css, val=("2-qubit-counts", lambda c: c.twoq
         d['method'] += [cs_name] * len(cs)
     df = pd.DataFrame(data=d)
 
-    plt.close('all')
-    ax = sns.boxplot(x="method", y="reduction", data=df)
+    sns.boxplot(x="method", y="reduction", data=df, ax=ax)
+    ax.set(ylim=(-100, 50))
     ax.set_title(f"{val_name} reductions")
+
 
 # Note: Could do evolutionary approach with qiskit "passes" as well
 if __name__ == "__main__":
-    # cs_dir = "circuits/bench"
-    cs_dir = "circuits/CNOT_HAD_PHASE/qubits_10-20_depth_50-100"
+    # cs_dir = "circuits/CNOT_HAD_PHASE/qubits_10-20_depth_50-100"
+    cs_dir = "circuits/bench"
     fs = [f for f in listdir(cs_dir) if isfile(join(cs_dir, f))]
+    # fs = fs[:10]
     cs = [zx.Circuit.load(join(cs_dir, f)).to_basic_gates() for f in fs]
     print(f"Loaded {len(cs)} circuits...")
 
 
     test_cs = [c for c in cs if is_small(c)]
     print(f"Loaded {len(test_cs)} small circuits...")
-    optimizers = [FullCircuitOptimize(), TketBasic()]
+    # Currently not including TketFullPeephole()
+    optimizers = [FullOptimize(), FullReduce(), TketBasic(), TketMinCX(), \
+                  QiskitTranspiler(opt_level=2), TeleportReduce()]
+    # NOTE: pyzx qasm parser doesn't appropriately handle -pi, so opt_level=3 fails
+    # optimizers = [AleksSA()]
 
     css = [(opt.name, [opt.optimize(c) for c in tqdm(test_cs)]) for opt in tqdm(optimizers)]
     # plot_circ_info([('original', test_cs)] + css)
-    compute_reductions(test_cs, css)
+    # plt.close('all')
 
+    plt.rcParams['font.size'] = 8
+    fig = plt.figure()
+    fig.set_figheight(10)
+    fig.set_figwidth(20)
+    ax1 = plt.subplot2grid((2, 2), (0, 0))
+    ax2 = plt.subplot2grid((2, 2), (0, 1))
+    ax3 = plt.subplot2grid((2, 2), (1, 0), colspan=2)
+
+    compute_reductions(test_cs, css, ax1, val=("T count", lambda c: c.tcount()))
+    compute_reductions(test_cs, css, ax2, val=("Total Gates", lambda c: len(c.gates)))
+    compute_reductions(test_cs, css, ax3)
+    plt.tight_layout()
     plt.show()

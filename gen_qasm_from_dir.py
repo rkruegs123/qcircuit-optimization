@@ -1,8 +1,5 @@
-import sys
 import os
- #sys.path.append('../pyzx')
 import logging
-import pyzx as zx
 import random
 import matplotlib.pyplot as plt
 import pdb
@@ -10,6 +7,10 @@ import argparse
 from os import listdir
 from os.path import isfile, join
 from tqdm import tqdm
+
+import sys
+sys.path.append('../pyzx')
+import pyzx as zx
 
 
 parser = argparse.ArgumentParser(description='Arguments for generating a directory of circuit benchmarks in QASM format from an existing directory of circuit files (any format)')

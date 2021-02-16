@@ -1,0 +1,40 @@
+* TODO:
+** GA method with reductions
+** Go over edge changes in pivot_cong
+** "Stop halfway" thing
+*** For a single circuit, plot changes in T vs total vs twoqubit count over steps of full_reduce
+*** Plot network metrics over time as well
+*** Try early stopping with full_reduce subroutines because it looks like full_reduce really only runs once...
+** Try annealing after qiskit/pytket instead of after full_reduce
+** Try methods with one after the other (like Lia, from different libraries)
+* biggest question topics for aleks
+** pyzx
+*** can i submit PR's? how often will they be processed? Submit tests with it?
+*** Tket error
+*** peephole compilation doesn't seem to preserve equality
+*** PyZX error exposed by qiskit
+**** qiskit doesn't parse -pi correctly from qasm
+*** Does from_qasm always result in a circuit with basic gates? If not, could maybe explian differences with tket and qiskit
+** function for graph-like state
+*** (all Z-spiders connected by hadamard edges, no self-loops/parallel edges)
+*** does Circuit.to_graph() enforce this?
+** congruences
+*** pivot cong code
+**** Allegedly currently breaks equality
+*** potential lc cong code
+*** do we want reverse directionS as well?
+**** This would "sparsify", and therefore reduce CNOTS while adding ONE to T-count. Once we do this, we coul dthen apply procedures that reduce T-count.
+** verifying equality with random states as in T-count paper
+*** would help clear fog with things like Tket Peephole and Aleks' SA
+** potentially searching space for extraction
+*** Each time you extract a CNOT, search space around it to try to minimize Gaussain elim. steps
+*** extract_op
+* Misc
+** Are other methods incapable of increasing CNOT count? How? How is PyZX better?
+** Could experiment with simplifying in ZH-calculus first
+** In GA, should you compute all matches before, or just pick 1, compute its matches, if it doesn't have any go onto next, and terminate if none have any matches?** will be uniform in passes, not in total number of matches
+*** would scale better in number of passes, but less "uniform"
+** Alternatives to GA and SA?
+** Note that can also include qiskit and tket passes in GA
+** For GA, probably want to track BOTh circuit and graph for each mutant. will have to get circuit anyways to compute score
+*** this way, can use whole set of rewrite rules
