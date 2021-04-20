@@ -7,6 +7,10 @@
 *** Try early stopping with full_reduce subroutines because it looks like full_reduce really only runs once...
 ** Try annealing after qiskit/pytket instead of after full_reduce
 ** Try methods with one after the other (like Lia, from different libraries)
+** optimizers should be a directory
+** Fork pyzx (this way we can sync on duvel)
+** Box plot for each generation ofmutant fitnesses for GA
+** Population will never die right now because of things like color change
 * biggest question topics for aleks
 ** pyzx
 *** can i submit PR's? how often will they be processed? Submit tests with it?
@@ -15,6 +19,7 @@
 *** PyZX error exposed by qiskit
 **** qiskit doesn't parse -pi correctly from qasm
 *** Does from_qasm always result in a circuit with basic gates? If not, could maybe explian differences with tket and qiskit
+*** multi-threaded at all?
 ** function for graph-like state
 *** (all Z-spiders connected by hadamard edges, no self-loops/parallel edges)
 *** does Circuit.to_graph() enforce this?
@@ -29,6 +34,16 @@
 ** potentially searching space for extraction
 *** Each time you extract a CNOT, search space around it to try to minimize Gaussain elim. steps
 *** extract_op
+** ga_optimizer
+*** extract_circuit fails sometimes? see ga_optimizers
+*** copy_Z fails becaues of changing the graph color (even to CHECK)
+*** best way to pass around g's and c's in mutants?
+**** circuits sohuld always be in basic gates for certain optimizations
+**** easiest if vertices are consecutive (because we operate on graph copys BECAUSE extraction fails sometimes)
+**** could get c_new, g_new, and go c_new = c_new.to_basic_gates() and g_new = c_new.to_graph(), but is this suboptimal?
+**** What GATE SET should I put things in at every step? Lots of problems with tket and qiskit
+*** is pyzx multithreaded at all? if everytihgns in serial, parallelizing GA is obvious
+** is targeting certain backends a concern, or is the "score" function an appropriate proxy?
 * Misc
 ** Are other methods incapable of increasing CNOT count? How? How is PyZX better?
 ** Could experiment with simplifying in ZH-calculus first
@@ -38,3 +53,62 @@
 ** Note that can also include qiskit and tket passes in GA
 ** For GA, probably want to track BOTh circuit and graph for each mutant. will have to get circuit anyways to compute score
 *** this way, can use whole set of rewrite rules
+*** ZH rules?
+* 2.17.20
+** Potentially setup Feynman (Haskell tool) for verification -- used in T-count paper
+** everything is serial in pyzx
+** python GIL (global interpreter lock). Python is not truly multithreaded
+** extracter assumes that graph is in some form.
+*** graph-like
+** 2_gh (everything green with hadamard edges), spider_simp to (approximately) MAKE something graph-like
+** don't currently have is_graph_like. could implement
+** note: extractor was always intended to be run on output of full_reduce
+** no targeting backends
+** could deepcopy to avoid all the g and c stuff in the GA
+** tpar (parallelizes t-gates) and topt are t-count reduces, staq is c implementation of tpar
+** hrules.py has the ZH-rules. Check fourier paper for to and from zx and zh.
+** baseline is teleport_reduce + Circuit.full_optimize
+* Questions and Notes for 7th week
+** why do we pull the phase UP instead of just aLONG an existing wire?
+*** For example, say we have 3 neighbors. Why don't we just pull out our phase along one of those qubits, so we'll really be acting on our two neighbors, and that phase. Would this be beneficial at all?
+** extract_circuit error*** "Circuit extraction failed: No extractable vertex found. Something went wrong"
+*** when we apply a congruence, we preserve graph-likeness but circuit extraction fails... why
+*** is there a more lightweight method to put it into normal form than full reduce?
+*** why is this not an issue after pivoting (only after local complementation)?
+*** note: should really use the safe teleport_reduce
+** full_reduce doesn't actually leave a graph in a graph-like state
+** appropriate use of edge_table as in pivoting?
+** compare_tensors error
+*** "ValueError: axes don't match array"
+** in annealing code, why is temprature only updated if we copy g1 into g?
+** do we care about hadamard gates?
+** annealing seems to convert all 2-qubit gates to CZ gates*** why could this be?
+*** CZ vs CNOT in terms of circuit complexity?
+** annealingseems to outperofrm baseline when number of qubits is small
+** want to start writing so I can just iteratively add results to the paper
+*** best way to draw ZX rlues, etc?
+*** dissertation template?
+* TODO: before 7th week meeting
+** test annealing and GA congruences after teleleport_reduce and simp (baseline)
+** incorporate LC with annealing, and compare with GA
+*** graph some basic results, e.g., for 10-qubit circuits
+*** evaluate with and without LC/PIVOT
+** track annealing over time (over # iteartions/steps) with different centrality measures
+*** see of one centrality measure decreases score over time faster (or slower) than just uniform sampling
+** lots of analyses to do (collect in a powerpoint)
+*** repeatability of annealing (with no fluff/extra edge/node selection). just fix a circuit, get distribution of annealing reduction
+*** Just LR or PIVOT
+*** SA reduction over time with different centrality measures being used (when testing either LC or PIVOT, make the other's selection uniform)
+*** SA performance on different # qubits and depths, etc (as well as diff. randomly generaed circuits)
+*** is running SA for longe riterations wortwhile? does it plateau?
+*** compare SA scoring (e.g., based on circuit extraction vs. edge count in graph)
+*** note: on all plots of score over time/iteration for SA (or generation for GA), but as horizontal dashed lines the score achieved by other methods
+*** opposite direction
+**** right now, we're trying teleport_reduce + basic_optimize THEN SA over this optimized version
+**** instead, we could see how changing the representation in the beginning affects the global optimization procedure
+**** basically search the space of (apply congruence(s) + (teleport_reduce + basic_optimize = baseline) vs. just baseline
+**** probably won't work because we have to extact the circuit afte the congruennces...
+* How to start on 3.1.21
+** Start presentation with proofs of congruence rules
+** Review all code (e.g., been making lots of g vs. g1 mistakes)
+** start simple analyses

@@ -10,10 +10,14 @@ import sys
 sys.path.append('../pyzx')
 import pyzx as zx
 
+from utilities import to_graph_like
+
 # import optimizers
 from baseline_optimizers import QiskitTranspiler, TketMinCX, TketFullPeephole, FullOptimize, \
     FullReduce, TeleportReduce, TketBasic
 from sa_optimizers import AleksSA
+import ga_optimizers as ga
+import anneal as sa
 
 MAX_TCOUNT = 100
 MAX_2QUBIT_COUNT = 100
@@ -91,6 +95,9 @@ def compute_reductions(original_cs, css, ax, val=("2-qubit-counts", lambda c: c.
 
 # Note: Could do evolutionary approach with qiskit "passes" as well
 if __name__ == "__main__":
+
+    """
+
     # cs_dir = "circuits/CNOT_HAD_PHASE/qubits_10-20_depth_50-100"
     cs_dir = "circuits/bench"
     fs = [f for f in listdir(cs_dir) if isfile(join(cs_dir, f))]
@@ -124,3 +131,98 @@ if __name__ == "__main__":
     compute_reductions(test_cs, css, ax3)
     plt.tight_layout()
     plt.show()
+    """
+
+
+
+    # Compare GA vs SA
+
+
+    N_QUBITS = 9
+    DEPTH = 100
+
+    c = zx.generate.CNOT_HAD_PHASE_circuit(qubits=N_QUBITS, depth=DEPTH, clifford=False)
+    g = c.to_graph()
+
+    g_tr = g.copy()
+    zx.teleport_reduce(g_tr)
+    c_tr = zx.Circuit.from_graph(g_tr.copy())
+    c_tr = zx.basic_optimization(c_tr).to_basic_gates()
+    g_tr = c_tr.to_graph()
+    to_graph_like(g_tr)
+
+    # fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(5, 3))
+    fig, axes = plt.subplots(nrows=1, ncols=2)
+
+
+    ## GA part
+
+    N_MUTANTS = 100
+    N_GENS = 100
+    actions = [ga.rand_pivot, ga.rand_lc, ga.do_nothing]
+    # actions = [rand_lc, rand_pivot]
+    ga_opt = ga.GeneticOptimizer(actions, n_generations=N_GENS, n_mutants=N_MUTANTS, quiet=False)
+    orig_score = ga.default_score(ga.Mutant(c_tr, g_tr))
+    print(f"Original score: {orig_score}")
+    scores, c_opt = ga_opt.evolve(c_tr.copy())
+    reductions = [(orig_score - gen_score) / orig_score * 100 for gen_score in scores]
+
+    """
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    # ax.plot(list(range(len(scores))), scores)
+    # ax.axhline(orig_score, label="original", alpha=0.5, linestyle="--")
+    ax.plot(list(range(len(reductions))), reductions)
+    plt.xlabel("Generation")
+    plt.ylabel("Reduction")
+    plt.title(f"GA: {N_QUBITS} qubits, {DEPTH} depth, {N_MUTANTS} mutants, {N_GENS} generations")
+    plt.legend()
+    plt.show()
+    plt.close('all')
+    """
+
+    axes[0].plot(list(range(len(reductions))), reductions)
+    axes[0].set_xlabel("Generation")
+    axes[0].set_ylabel("Reduction")
+    axes[0].set_title(f"GA: {N_MUTANTS} mutants, {N_GENS} generations")
+    axes[0].legend()
+
+
+
+    ## SA part
+
+    reductions = list()
+    N_TRIALS = 10
+    N_ITERS = 1000
+
+    init_score = 4 * c_tr.twoqubitcount() + c_tr.tcount()
+    for i in tqdm(range(N_TRIALS)):
+        g_anneal, _ = sa.pivot_anneal(g_tr.copy(), iters=N_ITERS, score=sa.c_score)
+        zx.full_reduce(g_anneal)
+        c_anneal = zx.extract_circuit(g_anneal.copy()).to_basic_gates()
+        c_anneal = zx.basic_optimization(c_anneal)
+
+        trial_score = 4 * c_anneal.twoqubitcount() + c_anneal.tcount()
+        reduction = (init_score - trial_score) / init_score * 100
+        reductions.append(reduction)
+
+        # print(f"\n----- trial {i} -----")
+        # print(c_anneal.stats())
+
+
+    """
+    plt.hist(reductions)
+    plt.xlabel("Reduction")
+    plt.ylabel("Frequency")
+    plt.title(f"SA: {N_TRIALS} trials, {N_ITERS} iters")
+    """
+
+
+    axes[1].hist(reductions)
+    axes[1].set_xlabel("Reduction")
+    axes[1].set_ylabel("Frequency")
+    axes[1].set_title(f"SA: {N_TRIALS} trials, {N_ITERS} iters")
+    plt.suptitle(f"{N_QUBITS} qubits, {DEPTH} depth") # , fontsize=14)
+    plt.show()
+
+    print("DONE")

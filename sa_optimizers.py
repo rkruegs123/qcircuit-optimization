@@ -1,7 +1,7 @@
 from base_optimizer import Optimizer
 
 # congruences
-from congruences import pivot_anneal
+from anneal import pivot_anneal
 
 
 class AleksSA(Optimizer):
