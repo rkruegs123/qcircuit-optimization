@@ -119,6 +119,35 @@ def uniform_weights(g, elts):
     return [1 / len(elts)] * len(elts)
 
 
+
+def c_score(c):
+    total = len(c.gates)
+    single_qubit_count = total - c.twoqubitcount()
+
+    # return 4 * c.twoqubitcount() + c.tcount()
+    return 10 * c.twoqubitcount() + single_qubit_count
+
+
+def g_score(g):
+    g_tmp = g.copy()
+
+    # FIXME: VERY EXPENSIVE. only to enable circuit extraction.
+    # A better strategy would be to probailistically full_reduce
+
+    zx.full_reduce(g_tmp)
+    c = zx.extract_circuit(g_tmp.copy()).to_basic_gates()
+    c = zx.basic_optimization(c)
+
+    return c_score(c)
+    """
+    total = len(c.gates)
+    single_qubit_count = total - c.twoqubitcount()
+
+    # return 4 * c.twoqubitcount() + c.tcount()
+    return 10 * c.twoqubitcount() + single_qubit_count
+    """
+
+
 if __name__ == "__main__":
     N_QUBITS = 10
     DEPTH = 300

@@ -22,7 +22,7 @@ from qiskit.transpiler.passes import BasicSwap, LookaheadSwap, StochasticSwap, O
 
 from congruences import is_pivot_edge, pivot_cong, is_lc_vertex, lc_cong, apply_rand_pivot, \
     apply_rand_lc
-from utilities import to_graph_like
+from utilities import to_graph_like, g_score, c_score
 
 import sys
 sys.path.append('../pyzx')
@@ -40,14 +40,15 @@ class Mutant:
 
 
 def default_score(m):
-    return 4 * m.c_curr.twoqubitcount() + m.c_curr.tcount()
+    return c_score(m.c_curr)
+    # return 4 * m.c_curr.twoqubitcount() + m.c_curr.tcount()
 
 class GeneticOptimizer(Optimizer):
-    def __init__(self, actions, score=default_score, n_generations=100, n_mutants=100, quiet=True):
+    def __init__(self, actions, score=default_score, quiet=True):
         # FIXME: Action should accept circ and graph and return (success, new circ and graph). Allows for actions that act on both graphs and circuits.
         self.actions = actions
-        self.n_gens = n_generations
-        self.n_mutants = n_mutants
+        # self.n_gens = n_generations
+        # self.n_mutants = n_mutants
 
         self.score = score # function that maps Circuit -> Double
         self.quiet = quiet
@@ -111,7 +112,10 @@ class GeneticOptimizer(Optimizer):
         _, c_opt = self.evolve(c)
         return c_opt
 
-    def evolve(self, c):
+    def evolve(self, c, n_mutants, n_generations):
+        self.n_mutants = n_mutants
+        self.n_gens = n_generations
+
         self.c_orig = c
         self.g_orig = c.to_graph()
         to_graph_like(self.g_orig)
@@ -122,6 +126,7 @@ class GeneticOptimizer(Optimizer):
         best_score = best_mutant.score
 
         gen_scores = [best_score]
+        best_scores = [best_score]
         for i in tqdm(range(self.n_gens), desc="Generations", disable=self.quiet):
             n_unique_mutants = len(list(set([id(m) for m in self.mutants])))
             assert(n_unique_mutants == self.n_mutants)
@@ -134,13 +139,14 @@ class GeneticOptimizer(Optimizer):
                 best_mutant = deepcopy(best_in_gen)
                 best_score = best_in_gen.score
 
+            best_scores.append(best_score)
             if all([m.dead for m in self.mutants]):
                 print("[_optimize] stopping early -- all mutants are dead")
                 break
 
             self.select()
 
-        return gen_scores, best_mutant.c_curr
+        return best_scores, gen_scores, best_mutant.c_curr
 
     @property
     def name(self):
@@ -476,18 +482,18 @@ if __name__ == "__main__":
         teleport_reduce, transpile0, transpile1, transpile2, full_optimize, # full_reduce,
         phase_block_optimize, basic_optimization
     ]
-    ga_opt = GeneticOptimizer(actions, n_generations=10, n_mutants=100, quiet=False)
+    ga_opt = GeneticOptimizer(actions, quiet=False)
     orig_score = default_score(Mutant(c, c.to_graph()))
     print(f"Original score: {orig_score}")
-    scores, c_opt = ga_opt.evolve(c)
+    best_scores, gen_scores, c_opt = ga_opt.evolve(c, n_mutants=100, n_generations=10)
 
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    ax.plot(list(range(len(scores))), scores)
+    ax.plot(list(range(len(gen_scores))), gen_scores)
     ax.axhline(orig_score, label="original", alpha=0.5, linestyle="--")
     plt.xlabel("Generation")
-    plt.ylabel("Best Score")
+    plt.ylabel("Best Score in Gen")
     plt.legend()
     plt.show()
     """
@@ -497,11 +503,11 @@ if __name__ == "__main__":
     N_GENS = 10
     actions = [rand_pivot, rand_lc, do_nothing]
     # actions = [rand_lc, rand_pivot]
-    ga_opt = GeneticOptimizer(actions, n_generations=N_GENS, n_mutants=N_MUTANTS, quiet=False)
+    ga_opt = GeneticOptimizer(actions, quiet=False)
     orig_score = default_score(Mutant(c_tr, g_tr))
     print(f"Original score: {orig_score}")
-    scores, c_opt = ga_opt.evolve(c_tr)
-    reductions = [(orig_score - gen_score) / orig_score * 100 for gen_score in scores]
+    best_scores, gen_scores, c_opt = ga_opt.evolve(c_tr, n_mutants=N_MUTANTS, n_generations=N_GENS)
+    reductions = [(orig_score - gen_score) / orig_score * 100 for gen_score in gen_scores]
 
     fig = plt.figure()
     ax = fig.add_subplot(111)

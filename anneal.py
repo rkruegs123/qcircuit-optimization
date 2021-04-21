@@ -20,7 +20,7 @@ import pyzx as zx
 from congruences import is_pivot_edge, pivot_cong, is_lc_vertex, lc_cong, apply_rand_pivot, \
     apply_rand_lc
 from congruences_ak import is_gadget
-from utilities import to_graph_like, pyzx2nx, uniform_weights
+from utilities import to_graph_like, pyzx2nx, uniform_weights, c_score, g_score
 
 
 
@@ -30,33 +30,6 @@ def size(g):
         sum(1 if is_gadget(g, v) else 0 for v in g.vertices())
     )
 
-
-def c_score(c):
-    total = len(c.gates)
-    single_qubit_count = total - c.twoqubitcount()
-
-    # return 4 * c.twoqubitcount() + c.tcount()
-    return 10 * c.twoqubitcount() + single_qubit_count
-
-
-def g_score(g):
-    g_tmp = g.copy()
-
-    # FIXME: VERY EXPENSIVE. only to enable circuit extraction.
-    # A better strategy would be to probailistically full_reduce
-
-    zx.full_reduce(g_tmp)
-    c = zx.extract_circuit(g_tmp.copy()).to_basic_gates()
-    c = zx.basic_optimization(c)
-
-    return c_score(c)
-    """
-    total = len(c.gates)
-    single_qubit_count = total - c.twoqubitcount()
-
-    # return 4 * c.twoqubitcount() + c.tcount()
-    return 10 * c.twoqubitcount() + single_qubit_count
-    """
 
 def edge_count(g):
     return g.num_edges()
@@ -149,7 +122,7 @@ def get_central_edges(g, allowed, n=20, method="load_centrality"):
 
 
 # simulated annealing
-def pivot_anneal(g, iters=1000, temp=5, cool=0.005, score=g_score, cong_ps=[0.5, 0.5],
+def pivot_anneal(g, iters=1000, temp=25, cool=0.005, score=g_score, cong_ps=[0.5, 0.5],
                  lc_select=uniform_weights,
                  pivot_select=uniform_weights,
                  full_reduce_prob=0.1, reset_prob=0.0):
@@ -177,9 +150,15 @@ def pivot_anneal(g, iters=1000, temp=5, cool=0.005, score=g_score, cong_ps=[0.5,
 
         best_scores.append(sz_best)
 
+        if temp != 0: temp *= 1.0 - cool
+        # if i % 50 == 0:
+            # print(i)
+            # print(temp)
+
         if sz1 < sz or \
             (temp != 0 and random.random() < math.exp((sz - sz1)/temp)):
-            if temp != 0: temp *= 1.0 - cool
+            # if temp != 0: temp *= 1.0 - cool
+
             sz = sz1
             g = g1.copy()
             if sz < sz_best:
@@ -198,7 +177,7 @@ def pivot_anneal(g, iters=1000, temp=5, cool=0.005, score=g_score, cong_ps=[0.5,
 
 if __name__ == "__main__":
     N_QUBITS = 5
-    DEPTH = 50
+    DEPTH = 100
     c = zx.generate.CNOT_HAD_PHASE_circuit(qubits=N_QUBITS, depth=DEPTH, clifford=False)
     print("----- initial -----")
     print(c.stats())
@@ -256,7 +235,7 @@ if __name__ == "__main__":
 
     # For annealing over output of full_reduce
     """
-    to_graph_like(g_fr)
+    # to_graph_like(g_fr)
     g_anneal, _ = pivot_anneal(g_fr, iters=100, score=g_score)
     zx.full_reduce(g_anneal)
     c_anneal = zx.extract_circuit(g_anneal.copy()).to_basic_gates()
@@ -266,6 +245,7 @@ if __name__ == "__main__":
 
     print(f"\nverify_equality: {c.verify_equality(c_anneal)}")
     """
+
 
 
     # For annealing over output of teleport_reduce
@@ -279,8 +259,6 @@ if __name__ == "__main__":
     print("\n----- anneal (tr, LR + PIVOT) -----")
     print(c_anneal.stats())
     """
-
-
 
 
     # For testing effect of only LC or PIVOT
@@ -327,12 +305,12 @@ if __name__ == "__main__":
     """
 
     # For plotting score throughout annealing process (for multiple trials)
-    """
+
     # to_graph_like(g_tr)
 
     init_score = c_score(c_tr) # 10 * c_tr.twoqubitcount() + c_tr.tcount()
     for _ in range(1):
-        g_anneal, tracker = pivot_anneal(g_tr.copy(), iters=100000, score=g_score, full_reduce_prob=0.1, reset_prob=0.1)
+        g_anneal, tracker = pivot_anneal(g_tr.copy(), iters=2000, score=g_score, full_reduce_prob=0.1, reset_prob=0.0)
         zx.full_reduce(g_anneal)
         c_anneal = zx.extract_circuit(g_anneal.copy()).to_basic_gates()
         c_anneal = zx.basic_optimization(c_anneal)
@@ -346,7 +324,7 @@ if __name__ == "__main__":
     plt.axhline(y=init_score, color='r', linestyle='--', label="tr + basic")
     plt.legend()
     plt.show()
-    """
+
 
 
     # For measuring difference between LC + PIVOT, LC only, PIVOT only
@@ -480,7 +458,7 @@ if __name__ == "__main__":
 
 
     # Evaluate different edge selection methods
-
+    """
     load_cent = partial(get_central_edges, method="load_centrality")
     btw_cent = partial(get_central_edges, method="betweenness_centrality")
     # pos_disp = partial(get_central_edges, method="pos_dispersion")
@@ -518,6 +496,7 @@ if __name__ == "__main__":
     plt.xlabel("Pivot Edge Selection Method")
     plt.ylabel("Complexity")
     plt.show()
+    """
 
 
     # Compare different probabilities of full_reducing
