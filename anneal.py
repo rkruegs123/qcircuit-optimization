@@ -125,14 +125,15 @@ def get_central_edges(g, allowed, n=20, method="load_centrality"):
 def pivot_anneal(g, iters=1000, temp=25, cool=0.005, score=g_score, cong_ps=[0.5, 0.5],
                  lc_select=uniform_weights,
                  pivot_select=uniform_weights,
-                 full_reduce_prob=0.1, reset_prob=0.0):
+                 full_reduce_prob=0.1, reset_prob=0.0,
+                 quiet=False):
     g_best = g.copy()
     sz = score(g_best)
     sz_best = sz
 
     best_scores = list()
 
-    for i in tqdm(range(iters), desc="annealing..."):
+    for i in tqdm(range(iters), desc="annealing...", disable=quiet):
 
         g1 = g.copy()
 

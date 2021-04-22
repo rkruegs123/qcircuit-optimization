@@ -112,14 +112,21 @@ class GeneticOptimizer(Optimizer):
         _, c_opt = self.evolve(c)
         return c_opt
 
-    def evolve(self, c, n_mutants, n_generations):
+    # def evolve(self, c, n_mutants, n_generations):
+    def evolve(self, g, n_mutants, n_generations):
         self.n_mutants = n_mutants
         self.n_gens = n_generations
 
-        self.c_orig = c
-        self.g_orig = c.to_graph()
+        self.g_orig = g.copy()
         to_graph_like(self.g_orig)
-        self.mutants = [Mutant(c, self.g_orig) for _ in range(self.n_mutants)]
+        self.c_orig = zx.extract_circuit(self.g_orig.copy()).to_basic_gates()
+        self.c_orig = zx.basic_optimization(self.c_orig)
+
+        # self.c_orig = c
+        # self.g_orig = c.to_graph()
+        # to_graph_like(self.g_orig)
+        # self.mutants = [Mutant(c, self.g_orig) for _ in range(self.n_mutants)]
+        self.mutants = [Mutant(self.c_orig, self.g_orig) for _ in range(self.n_mutants)]
 
         self.update_scores()
         best_mutant = min(self.mutants, key=lambda m: m.score) # FIXME: Check if this assignment is by reference or value
